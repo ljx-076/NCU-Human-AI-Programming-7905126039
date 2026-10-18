@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单摆模拟器 - 李锦璇 7905126039</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a24;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e0e0e0;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            color: #8892b0;
+        }
+        canvas {
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            background: #1a1a24;
+        }
+        .info {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #5a6a8a;
+        }
+        .controls {
+            margin-top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 400px;
+            padding: 20px;
+            background: #22222e;
+            border-radius: 8px;
+            border: 1px solid #2a2a3a;
+        }
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .control-row label {
+            font-size: 13px;
+            color: #8892b0;
+            min-width: 80px;
+        }
+        .control-row input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 4px;
+            background: #3a3a4a;
+            border-radius: 2px;
+            outline: none;
+        }
+        .control-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #64b4ff;
+            cursor: pointer;
+            border: 2px solid #1a1a24;
+        }
+        .control-row input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #64b4ff;
+            cursor: pointer;
+            border: 2px solid #1a1a24;
+        }
+        .control-row .value {
+            font-size: 13px;
+            color: #64b4ff;
+            min-width: 60px;
+            text-align: right;
+            font-family: 'Consolas', monospace;
+        }
+        .reset-btn {
+            margin-top: 8px;
+            padding: 10px 20px;
+            background: #2a3a5a;
+            color: #64b4ff;
+            border: 1px solid #3a4a6a;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            align-self: center;
+        }
+        .reset-btn:hover {
+            background: #3a4a6a;
+            border-color: #64b4ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>单摆模拟器</h1>
+    <canvas id="pendulumCanvas" width="600" height="500"></canvas>
+    <div class="info">摆长 L=200px | 重力 g=9.8 | 初始角度 5°</div>
+
+    <div class="controls">
+        <div class="control-row">
+            <label>摆长 (px)</label>
+            <input type="range" id="lengthSlider" min="100" max="350" value="200" step="1">
+            <span class="value" id="lengthValue">200</span>
+        </div>
+        <div class="control-row">
+            <label>重力</label>
+            <input type="range" id="gravitySlider" min="1" max="25" value="9.8" step="0.1">
+            <span class="value" id="gravityValue">9.8</span>
+        </div>
+        <div class="control-row">
+            <label>阻尼</label>
+            <input type="range" id="dampingSlider" min="0" max="0.01" value="0.001" step="0.001">
+            <span class="value" id="dampingValue">0.001</span>
+        </div>
+        <button class="reset-btn" id="resetBtn">重置摆动 (45°)</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pendulumCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 物理参数 (改为 let 以支持动态调整)
+        let L = 200;              // 摆长 (px)
+        let g = 9.8;              // 重力加速度
+        const initialAngle = 45 * Math.PI / 180;  // 初始角度 (弧度) - 重置时使用 45°
+        let damping = 0.999;      // 阻尼系数 (1 - dampingValue)
+
+        // 状态变量
+        let angle = 5 * Math.PI / 180;  // 当前角度，初始 5°
+        let angularVelocity = 0;
+        let angularAcceleration = 0;
+
+        // 悬挂点位置
+        const pivotX = canvas.width / 2;
+        const pivotY = 80;
+
+        // 获取 DOM 元素
+        const lengthSlider = document.getElementById('lengthSlider');
+        const gravitySlider = document.getElementById('gravitySlider');
+        const dampingSlider = document.getElementById('dampingSlider');
+        const lengthValue = document.getElementById('lengthValue');
+        const gravityValue = document.getElementById('gravityValue');
+        const dampingValue = document.getElementById('dampingValue');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // 滑块事件监听 - 摆长
+        lengthSlider.addEventListener('input', function() {
+            L = parseFloat(this.value);
+            lengthValue.textContent = L;
+        });
+
+        // 滑块事件监听 - 重力
+        gravitySlider.addEventListener('input', function() {
+            g = parseFloat(this.value);
+            gravityValue.textContent = g.toFixed(1);
+        });
+
+        // 滑块事件监听 - 阻尼
+        dampingSlider.addEventListener('input', function() {
+            const dampingVal = parseFloat(this.value);
+            damping = 1 - dampingVal;
+            dampingValue.textContent = dampingVal.toFixed(3);
+        });
+
+        // 重置按钮事件监听
+        resetBtn.addEventListener('click', resetAnimation);
+
+        // 重置函数（全局可访问）
+        function resetAnimation() {
+            angle = initialAngle;
+            angularVelocity = 0;
+            angularAcceleration = 0;
+        }
+
+        // 物理计算
+        function updatePhysics() {
+            // 角加速度 = -(g/L) * sin(θ)
+            angularAcceleration = -(g / L) * Math.sin(angle) * 100;
+            angularVelocity += angularAcceleration * 0.016;
+            angularVelocity *= damping;
+            angle += angularVelocity * 0.016;
+        }
+
+        // 绘制
+        function draw() {
+            // 清空画布
+            ctx.fillStyle = '#1a1a24';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 计算摆球位置
+            const ballX = pivotX + L * Math.sin(angle);
+            const ballY = pivotY + L * Math.cos(angle);
+
+            // 绘制悬挂点
+            ctx.beginPath();
+            ctx.arc(pivotX, pivotY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#4a5568';
+            ctx.fill();
+
+            // 绘制摆线
+            ctx.beginPath();
+            ctx.moveTo(pivotX, pivotY);
+            ctx.lineTo(ballX, ballY);
+            ctx.strokeStyle = '#4a5568';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 绘制摆球发光效果
+            const gradient = ctx.createRadialGradient(ballX, ballY, 0, ballX, ballY, 30);
+            gradient.addColorStop(0, 'rgba(100, 180, 255, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(100, 180, 255, 0.3)');
+            gradient.addColorStop(1, 'rgba(100, 180, 255, 0)');
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, 30, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // 绘制摆球
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, 15, 0, Math.PI * 2);
+            ctx.fillStyle = '#64b4ff';
+            ctx.fill();
+            ctx.strokeStyle = '#8892b0';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // 绘制角度指示
+            ctx.beginPath();
+            ctx.arc(pivotX, pivotY, 40, Math.PI / 2 - 0.3, Math.PI / 2 + 0.3);
+            ctx.strokeStyle = '#5a6a8a';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // 动画循环
+        function animate() {
+            updatePhysics();
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        // 启动
+        animate();
+    </script>
+</body>
+</html>
